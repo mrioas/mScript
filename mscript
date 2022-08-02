@@ -1,0 +1,241 @@
+#!/usr/bin/sh --debug
+set -e
+# Commands used
+# # exa, traceroute, printf, echo, ip, dunstify, nmap, 
+
+### IP, the package is called iproute2 and this replaces the traditional ifconfig and route commands.
+        # ip link, is for configuring, adding, adn deleting network interfaces, see man ip for more information. 
+        # ip addres, use to display addresses, bind new address or delete old one
+        # ip route, use to print o display the routing  table
+g='/usr/bin/git'
+helper(){ 
+    # helper
+    printf "  Usage:\n"
+    printf "\e[3;3m    Options of system \e[1;31m--sys|-s|sys\e[0m\n" 
+    printf "\e[3;3m    Options of projects \e[1;31m--proj|-p|proj\e[0m\n" 
+}
+helper_proj(){
+    printf "  Subcommands available:\n"
+    printf "      \e[1;36m--git|git\n"
+}
+helper_git(){
+    printf "  Subcommands available:\n"
+    printf "      \e[1;36m--log|log\n"
+    printf "      \e[1;36m--log_rofi|log_rofi\n"
+    printf "      \e[1;36m--status|status\n"
+}
+helper_sys(){
+    printf "  Subcommands available:\n"
+    printf "      \e[1;3m\e[1;31mmount -> Mount disk\n"
+    printf "      player -> Options of multimedia\n"
+    printf "      brightness\n"
+    printf "      randr\n"
+    printf "      find\n"
+    printf "      browser\n"
+    printf "      keyboard\n"
+    printf "      server\n"
+    printf "      ssh\n"
+    printf "      pacman -> Short commands for pacman\n"
+}
+ssh(){
+   echo "Hi"  
+}
+keyboard(){
+    key_actual=$(setxkbmap -query | grep "layout" | cut -d ":" -f 2 |xargs)
+    setxkbmap us -option compose:rctrl
+    dunstify -u low -r "99999" "Key: $key_actual"
+}
+brightness(){
+    msgId="991002"
+    #max_brightness=$(cat /sys/class/backlight/intel_backlight/max_brightness)
+    actual=$(cat /sys/class/backlight/intel_backlight/actual_brightness)
+    avg=$((actual*100/937))
+    #echo $((actual + 5))
+    #for i in $max_brightness
+  if [ "$3" -eq "+5" ];then
+          echo $((actual + 46)) > /sys/class/backlight/intel_backlight/brightness
+          status=$avg
+  elif [ "$3" -eq "-5" ];then
+          echo $((actual - 46)) > /sys/class/backlight/intel_backlight/brightness
+          status=$avg
+  fi
+  dunstify -u low -r "$msgId" "Brightness $status"
+}
+metadata_on_files(){
+ # package tested in developement
+ # -- OVER ARCHLINUX, needed be installed
+ # --- mp3info, file, baloo, perl-image-exiftool, exiv2
+ echo "h"
+}
+player(){
+	#The command pactl need libpulse installed
+	#The command amixer need alsa-utils installed
+  metadata=""
+  msgId="991002"
+  if [ "$3" = "next" ];then
+    playerctl next
+    volume=$(amixer sget Master | awk -F"[][]" '/Left:/ { print $2 }')
+  elif [ "$3" = "prev" ];then
+    playerctl previous
+    volume=$(amixer sget Master | awk -F"[][]" '/Left:/ { print $2 }')
+  elif [ "$3" = "play-pause" ];then
+    playerctl play-pause
+    volume=$(amixer sget Master | awk -F"[][]" '/Left:/ { print $2 }')
+  elif [ "$3" = "up" ]; then
+    amixer -q set Master 5%+ unmute
+    volume=$(amixer sget Master | awk -F"[][]" '/Left:/ { print $2 }')
+	elif [ "$3" = "down" ]; then
+    amixer -q set Master 5%- unmute
+    volume=$(amixer sget Master | awk -F"[][]" '/Left:/ { print $2 }')
+	elif [ "$3" = "toggle" ]; then
+    amixer -D pulse sset Master toggle-mute
+    volume=$(amixer sget Master | awk -F"[][]" '/Left:/ { print $2 }')
+    if [ -z "$(playerctl -s -l)" ];then
+      metadata="No players"
+    else
+      metadata=$(playerctl metadata --format '{{playerName}}: {{lc(status)}} : {{duration(position)}}/{{duration(mpris:length)}} - {{ artist }}-{{ album }} -{{ title }}')
+    fi
+	fi
+  dunstify -a Player -u low -r "$msgId" "Volume $volume $metadata"
+}
+git_status(){
+	#$g status --uno -b | fzf --multi --preview 'git status -uno'
+	#$g status -uno -s | fzf --multi --preview 'bat {+2}'
+	$g status -uno -s | fzf --multi --preview 'bat --color=always -d {+2}'
+}
+git_log(){
+	#$g log --graph --abbrev-commit --decorate --format=format:'%C(yellow)%h%C(reset)%C(auto)%d%C(reset) %C(normal)%s%C(reset) %C(dim white)%an%C(reset) %C(dim blue)(%ar)%C(reset)' | fzf
+	$g log --oneline | fzf --multi --preview 'git show --color=always {+1}'
+}
+git_log_gui(){
+	$g log --graph --abbrev-commit --decorate --format=format:'%C(yellow)%h%C(reset)%C(auto)%d%C(reset) %C(normal)%s%C(reset) %C(dim white)%an%C(reset) %C(dim blue)(%ar)%C(reset)' | rofi -dmenu -p "Git"
+}
+notifications(){
+    # send notifications 
+    dunstify -a "Notifications Center" -u low "$1"
+}
+fixed_window(){
+  #Always On Top, for Openbox over Xorg
+  id_window=$(xprop -root | grep -e "_NET_ACTIVE_WINDOW(WINDOW)" | awk '{print $5}'|sed 's/0x//')
+  fixed_w=$(wmctrl -lp | grep $id_window|awk '{print $5" "$6" "$7" "$8" "$9" "$10}')
+  fixed_status=$(xprop -id $id_window | grep "_NET_WM_STATE(ATOM) = " | awk '{print $3}' | sed 's/,//')
+  if [ "$fixed_status" = "_NET_WM_STATE_ABOVE" ];then
+    notifications "Fixed window: $fixed_w" 
+  else
+    notifications "Unfixed window: $fixed_w"
+  fi
+}
+pacman(){
+    # Fast command for pacman -> Package Manager for archlinux
+    echo $1 $2
+    if [[ "$1" -eq "own" ]];then
+      yay --config ~/.config/pacman/pacman.conf -Qo $2
+      notify=(echo )
+    fi
+
+}
+server(){
+    # internet connection
+    if [[ -n $1 ]];then 
+      # echo "Using nslookup and ipinfo.io"
+      ipv46=$(nslookup $1 | grep "Address"| egrep -e '([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})' -e '(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))' -o)
+      for i in $ipv46;do
+        # echo "Hi, $i"
+        curl -s https://ipinfo.io/$i|jq '.city, .loc, .ip, .country, .org, .timezone'
+        echo "----------------------"
+      done
+    # nslookup $1 | egrep -e '([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})' -e '(([a-z0-9]{0,61}-.+?[a-z].?))' -o | grep '[:]' -v
+    # printf "$ipv46\n"
+    else
+      echo "Using nslookup and ipinfo.io"
+      curl -s https://ipinfo.io/|jq '.city, .loc, .ip, .country, .org, .timezone'
+    fi
+}
+git(){
+	case $3  in
+		log)
+			git_log
+		;;
+		log_rofi)
+			git_log_gui	
+		;;
+	status)
+			git_status	
+		;;
+		*)
+			helper_git
+		;;
+	esac
+}
+radio(){
+  for i in {8000..9000}
+  do
+    hostradio='http://radios.bolivianservers.net:'$i
+    printf "$hostradio\t"
+    curl --silent -I "$hostradio" | grep -e "[tT]ype:"
+    printf "\n"
+  done
+}
+hobbies(){
+	case "$2" in
+		--radio|radio)
+			radio $*
+		;;
+	esac
+}
+proj(){
+	case "$2" in
+		--git|git)
+			git $*
+		;;
+		*)
+			helper_proj
+		;;
+	esac
+}
+sys(){
+	case "$2" in
+		--player|player)
+			player "$1" "$2" "$3"
+		;;
+    --server|server)
+      server "$3"
+    ;;
+		--brightness|brightness)
+			brightness "$1" "$2" "$3"
+		;;
+		--keyboard|keyboard)
+			keyboard "$*"
+		;;
+    --notifications|notifications)
+      notifications
+    ;;
+    --ssh|ssh)
+      ssh        
+    ;;
+    --pacman|pacman)
+      pacman "$2" "$3" 
+    ;;
+    fixed_window)
+      fixed_window
+    ;;
+		*)
+ 	   		helper_sys
+	   	;;
+	esac
+}
+case "$1" in
+	sys|-s|--sys)
+		sys $*
+		;;
+	proj|-p|--proj)
+		proj $*
+		;;
+	hobb|hob)
+		hobbies $*
+		;;
+esac
+
+if [ $# -eq 0 ];then 
+ 	helper
+fi
