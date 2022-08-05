@@ -90,12 +90,13 @@ player(){
 	elif [ "$3" = "toggle" ]; then
     amixer -D pulse sset Master toggle-mute
     volume=$(amixer sget Master | awk -F"[][]" '/Left:/ { print $2 }')
-    if [ -z "$(playerctl -s -l)" ];then
+  fi
+  if [ -z "$(playerctl -s -l)" ];then
       metadata="No players"
-    else
+  else
       metadata=$(playerctl metadata --format '{{playerName}}: {{lc(status)}} : {{duration(position)}}/{{duration(mpris:length)}} - {{ artist }}-{{ album }} -{{ title }}')
-    fi
-	fi
+   fi
+
   dunstify -a Player -u low -r "$msgId" "Volume $volume $metadata"
 }
 git_status(){
